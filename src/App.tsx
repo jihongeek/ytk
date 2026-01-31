@@ -162,7 +162,9 @@ export default function App() {
       setMeta(playlistMeta);
       setItems(playlistItems);
     } catch (err) {
-      setError(err instanceof Error ? err.message : '알 수 없는 오류가 발생했습니다.');
+      setError(
+        err instanceof Error ? err.message : '알 수 없는 오류가 발생했습니다.'
+      );
     } finally {
       setLoading(false);
     }
@@ -181,7 +183,7 @@ export default function App() {
       return;
     }
 
-    const contents = items.slice(0, 3).map((item) => {
+    const contents = items.slice(0, PLAYLIST_ITEMS_LIMIT).map((item) => {
       const videoUrl = `https://www.youtube.com/watch?v=${item.videoId}&list=${playlistId}`;
       const fallbackThumbnail = `https://img.youtube.com/vi/${item.videoId}/mqdefault.jpg`;
       return {
@@ -221,54 +223,56 @@ export default function App() {
       });
     } catch {
       setError(
-        '카카오 공유에 실패했습니다. 카카오 개발자 콘솔의 웹 도메인에 youtube.com과 img.youtube.com을 등록했는지 확인해 주세요.',
+        '카카오 공유에 실패했습니다. 카카오 개발자 콘솔의 웹 도메인에 youtube.com과 img.youtube.com을 등록했는지 확인해 주세요.'
       );
     }
   };
 
   return (
-    <div className="app">
-      <header className="header">
+    <div className='app'>
+      <header className='header'>
         <h1>유튜브 플레이리스트 카카오톡 공유</h1>
         <p>유튜브 플레이리스트 링크를 넣고 리스트 메시지로 공유하세요.</p>
       </header>
 
-      <section className="panel">
-        <label className="label" htmlFor="playlist-input">
+      <section className='panel'>
+        <label className='label' htmlFor='playlist-input'>
           플레이리스트 URL 또는 ID
         </label>
-        <div className="input-row">
+        <div className='input-row'>
           <input
-            id="playlist-input"
-            type="text"
-            placeholder="https://www.youtube.com/playlist?list=..."
+            id='playlist-input'
+            type='text'
+            placeholder='https://www.youtube.com/playlist?list=...'
             value={playlistUrl}
             onChange={(event) => setPlaylistUrl(event.target.value)}
           />
-          <button type="button" onClick={handleLoad} disabled={loading}>
+          <button type='button' onClick={handleLoad} disabled={loading}>
             {loading ? '불러오는 중...' : '불러오기'}
           </button>
         </div>
-        {error && <p className="error">{error}</p>}
+        {error && <p className='error'>{error}</p>}
         {!YT_API_KEY && (
-          <p className="warning">VITE_YT_API_KEY 환경 변수를 설정해 주세요.</p>
+          <p className='warning'>VITE_YT_API_KEY 환경 변수를 설정해 주세요.</p>
         )}
         {!KAKAO_JS_KEY && (
-          <p className="warning">VITE_KAKAO_JS_KEY 환경 변수를 설정해 주세요.</p>
+          <p className='warning'>
+            VITE_KAKAO_JS_KEY 환경 변수를 설정해 주세요.
+          </p>
         )}
       </section>
 
       {meta && (
-        <section className="panel">
-          <div className="meta">
+        <section className='panel'>
+          <div className='meta'>
             <h2>{meta.title}</h2>
             <span>{meta.channelTitle}</span>
           </div>
-          <div className="list">
+          <div className='list'>
             {items.map((item) => (
-              <article key={item.videoId} className="list-item">
+              <article key={item.videoId} className='list-item'>
                 {item.thumbnailUrl && (
-                  <img src={item.thumbnailUrl} alt="" loading="lazy" />
+                  <img src={item.thumbnailUrl} alt='' loading='lazy' />
                 )}
                 <div>
                   <h3>{item.title}</h3>
@@ -277,7 +281,7 @@ export default function App() {
               </article>
             ))}
           </div>
-          <button type="button" className="share" onClick={handleShare}>
+          <button type='button' className='share' onClick={handleShare}>
             카카오톡으로 공유
           </button>
         </section>
