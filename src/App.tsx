@@ -1,17 +1,14 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import './App.css';
-
-type PlaylistItem = {
-  title: string;
-  description: string;
-  thumbnailUrl: string;
-  videoId: string;
-};
-
-type PlaylistMeta = {
-  title: string;
-  channelTitle: string;
-};
+import {
+  fetchPlaylistItems,
+  fetchPlaylistMeta,
+  PlaylistItem,
+  PlaylistMeta,
+} from './services/youtubeApi';
+import { sendKakaoShare } from './services/kakaoShare.ts';
+import { initKakao } from './utils/kakao.ts';
+import { parsePlaylistId } from './utils/youtube';
 
 declare global {
   interface Window {
@@ -30,96 +27,6 @@ const KAKAO_JS_KEY = import.meta.env.VITE_KAKAO_JS_KEY as string | undefined;
 
 const PLAYLIST_ITEMS_LIMIT = 3;
 
-function parsePlaylistId(input: string): string | null {
-  const trimmed = input.trim();
-  if (!trimmed) return null;
-
-  try {
-    const url = new URL(trimmed);
-    const listId = url.searchParams.get('list');
-    if (listId) return listId;
-  } catch {
-    // Not a URL. Continue with raw ID handling.
-  }
-
-  if (/^[a-zA-Z0-9_-]+$/.test(trimmed)) {
-    return trimmed;
-  }
-
-  return null;
-}
-
-async function fetchPlaylistMeta(playlistId: string): Promise<PlaylistMeta> {
-  if (!YT_API_KEY) {
-    throw new Error('YouTube API 키가 설정되어 있지 않습니다.');
-  }
-
-  const url = new URL('https://www.googleapis.com/youtube/v3/playlists');
-  url.searchParams.set('part', 'snippet');
-  url.searchParams.set('id', playlistId);
-  url.searchParams.set('key', YT_API_KEY);
-
-  const response = await fetch(url.toString());
-  if (!response.ok) {
-    throw new Error('플레이리스트 정보를 불러오지 못했습니다.');
-  }
-
-  const data = (await response.json()) as {
-    items?: Array<{ snippet?: { title?: string; channelTitle?: string } }>;
-  };
-
-  const item = data.items?.[0];
-  if (!item?.snippet?.title) {
-    throw new Error('플레이리스트를 찾을 수 없습니다.');
-  }
-
-  return {
-    title: item.snippet.title,
-    channelTitle: item.snippet.channelTitle ?? '',
-  };
-}
-
-async function fetchPlaylistItems(playlistId: string): Promise<PlaylistItem[]> {
-  if (!YT_API_KEY) {
-    throw new Error('YouTube API 키가 설정되어 있지 않습니다.');
-  }
-
-  const url = new URL('https://www.googleapis.com/youtube/v3/playlistItems');
-  url.searchParams.set('part', 'snippet');
-  url.searchParams.set('playlistId', playlistId);
-  url.searchParams.set('maxResults', String(PLAYLIST_ITEMS_LIMIT));
-  url.searchParams.set('key', YT_API_KEY);
-
-  const response = await fetch(url.toString());
-  if (!response.ok) {
-    throw new Error('플레이리스트 항목을 불러오지 못했습니다.');
-  }
-
-  const data = (await response.json()) as {
-    items?: Array<{
-      snippet?: {
-        title?: string;
-        description?: string;
-        resourceId?: { videoId?: string };
-        thumbnails?: { medium?: { url?: string } };
-        videoOwnerChannelTitle?: string;
-      };
-    }>;
-  };
-
-  return (
-    data.items?.map((item) => {
-      const snippet = item.snippet ?? {};
-      return {
-        title: snippet.title ?? '제목 없음',
-        description: snippet.videoOwnerChannelTitle ?? '',
-        thumbnailUrl: snippet.thumbnails?.medium?.url ?? '',
-        videoId: snippet.resourceId?.videoId ?? '',
-      };
-    }) ?? []
-  ).filter((item) => item.videoId);
-}
-
 export default function App() {
   const [playlistUrl, setPlaylistUrl] = useState('');
   const [playlistId, setPlaylistId] = useState<string | null>(null);
@@ -131,15 +38,8 @@ export default function App() {
   useEffect(() => {
     if (!KAKAO_JS_KEY) return;
     if (!window.Kakao) return;
-    if (!window.Kakao.isInitialized()) {
-      window.Kakao.init(KAKAO_JS_KEY);
-    }
+    initKakao(KAKAO_JS_KEY);
   }, []);
-
-  const playlistLink = useMemo(() => {
-    if (!playlistId) return '';
-    return `https://www.youtube.com/playlist?list=${playlistId}`;
-  }, [playlistId]);
 
   const handleLoad = async () => {
     setError(null);
@@ -156,8 +56,8 @@ export default function App() {
     setLoading(true);
     try {
       const [playlistMeta, playlistItems] = await Promise.all([
-        fetchPlaylistMeta(id),
-        fetchPlaylistItems(id),
+        fetchPlaylistMeta(id, YT_API_KEY),
+        fetchPlaylistItems(id, YT_API_KEY, PLAYLIST_ITEMS_LIMIT),
       ]);
       setMeta(playlistMeta);
       setItems(playlistItems);
@@ -173,57 +73,20 @@ export default function App() {
   const handleShare = () => {
     setError(null);
 
-    if (!window.Kakao || !window.Kakao.isInitialized()) {
-      setError('카카오 SDK 초기화에 실패했습니다. 키를 확인해 주세요.');
-      return;
-    }
-
-    if (!meta || !playlistId || items.length === 0) {
-      setError('공유할 데이터가 없습니다.');
-      return;
-    }
-
-    const contents = items.slice(0, PLAYLIST_ITEMS_LIMIT).map((item) => {
-      const videoUrl = `https://www.youtube.com/watch?v=${item.videoId}&list=${playlistId}`;
-      const fallbackThumbnail = `https://img.youtube.com/vi/${item.videoId}/mqdefault.jpg`;
-      return {
-        title: item.title,
-        description: item.description || meta.channelTitle,
-        imageUrl: item.thumbnailUrl || fallbackThumbnail,
-        link: {
-          webUrl: videoUrl,
-          mobileWebUrl: videoUrl,
-        },
-      };
-    });
-
-    if (contents.length < 2) {
-      setError('리스트 메시지는 최소 2개 영상이 필요합니다.');
-      return;
-    }
-
     try {
-      window.Kakao.Share.sendDefault({
-        objectType: 'list',
-        headerTitle: meta.title,
-        headerLink: {
-          webUrl: playlistLink,
-          mobileWebUrl: playlistLink,
-        },
-        contents,
-        buttons: [
-          {
-            title: '유투브에서 보기',
-            link: {
-              webUrl: playlistLink,
-              mobileWebUrl: playlistLink,
-            },
-          },
-        ],
+      if (!meta || !playlistId) {
+        throw new Error('공유할 데이터가 없습니다.');
+      }
+
+      sendKakaoShare({
+        meta,
+        playlistId,
+        items,
+        limit: PLAYLIST_ITEMS_LIMIT,
       });
-    } catch {
+    } catch (err) {
       setError(
-        '카카오 공유에 실패했습니다. 카카오 개발자 콘솔의 웹 도메인에 youtube.com과 img.youtube.com을 등록했는지 확인해 주세요.'
+        err instanceof Error ? err.message : '알 수 없는 오류가 발생했습니다.'
       );
     }
   };
