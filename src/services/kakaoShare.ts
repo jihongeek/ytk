@@ -1,10 +1,6 @@
 import { PlaylistItem, PlaylistMeta } from './youtubeApi';
 import { isKakaoInitialized } from '../utils/kakao.ts';
-import {
-  buildFallbackThumbnail,
-  buildPlaylistLink,
-  buildVideoLink,
-} from '../utils/youtube';
+import { buildFallbackThumbnail } from '../utils/youtube';
 
 type KakaoShareParams = {
   meta: PlaylistMeta;
@@ -27,17 +23,28 @@ export function sendKakaoShare({
     throw new Error('공유할 데이터가 없습니다.');
   }
 
-  const playlistLink = buildPlaylistLink(playlistId);
+  const redirectOrigin =
+    (import.meta.env.VITE_REDIRECT_ORIGIN as string | undefined) ||
+    `${window.location.protocol}//${window.location.host}`;
+  const redirectBase = `${redirectOrigin}/redirect`;
+  const buildRedirectLink = (params: Record<string, string>) => {
+    const searchParams = new URLSearchParams(params);
+    return `${redirectBase}?${searchParams.toString()}`;
+  };
+  const playlistRedirectLink = buildRedirectLink({ list: playlistId });
   const contents = items.slice(0, limit).map((item) => {
-    const videoUrl = buildVideoLink(item.videoId, playlistId);
+    const videoRedirectLink = buildRedirectLink({
+      v: item.videoId,
+      list: playlistId,
+    });
     const fallbackThumbnail = buildFallbackThumbnail(item.videoId);
     return {
       title: item.title,
       description: item.description || meta.channelTitle,
       imageUrl: item.thumbnailUrl || fallbackThumbnail,
       link: {
-        webUrl: videoUrl,
-        mobileWebUrl: videoUrl,
+        webUrl: videoRedirectLink,
+        mobileWebUrl: videoRedirectLink,
       },
     };
   });
@@ -51,16 +58,16 @@ export function sendKakaoShare({
       objectType: 'list',
       headerTitle: meta.title,
       headerLink: {
-        webUrl: playlistLink,
-        mobileWebUrl: playlistLink,
+        webUrl: playlistRedirectLink,
+        mobileWebUrl: playlistRedirectLink,
       },
       contents,
       buttons: [
         {
           title: '유투브에서 보기',
           link: {
-            webUrl: playlistLink,
-            mobileWebUrl: playlistLink,
+            webUrl: playlistRedirectLink,
+            mobileWebUrl: playlistRedirectLink,
           },
         },
       ],
